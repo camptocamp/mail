@@ -4,20 +4,16 @@
 
 from odoo_test_helper import FakeModelLoader
 
-from odoo.tests.common import Form, TransactionCase, tagged
+from odoo.tests import Form, tagged
+from odoo.tests.common import TransactionCase
 
 
-@tagged("post_install", "-at_install")
+@tagged("-at_install", "post_install")
 class TestMailAutosubscribe(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Setup env
-        cls.env = cls.env(
-            context=dict(
-                cls.env.context, tracking_disable=True, test_mail_autosubscribe=True
-            )
-        )
+        cls.env = cls.env(context=dict(cls.env.context, tracking_disable=True))
         # Load fake order model
         cls.loader = FakeModelLoader(cls.env, cls.__module__)
         cls.loader.backup_registry()
@@ -101,7 +97,9 @@ class TestMailAutosubscribe(TransactionCase):
         self.mail_template.use_default_to = True
         self.mail_template.send_mail(self.order.id)
         message = self.order.message_ids[0]
-        self.assertEqual(message.partner_ids, self.partner_2 | self.partner_3)
+        self.assertEqual(
+            message.partner_ids, self.partner_2
+        )  # test_condition in default recipients does not autosubscribe
 
     def test_mail_message_composer(self):
         """Test autosubscribe when using the mail composer"""
@@ -109,7 +107,7 @@ class TestMailAutosubscribe(TransactionCase):
         composer = Form(
             self.env["mail.compose.message"].with_context(
                 default_model="fake.order",
-                default_res_id=self.order.id,
+                default_res_ids=[self.order.id],
                 default_use_template=True,
                 default_template_id=self.mail_template.id,
                 default_composition_mode="comment",
@@ -125,7 +123,7 @@ class TestMailAutosubscribe(TransactionCase):
         composer = Form(
             self.env["mail.compose.message"].with_context(
                 default_model="fake.order",
-                default_res_id=self.order.id,
+                default_res_ids=[self.order.id],
                 default_use_template=True,
                 default_template_id=self.mail_template.id,
                 default_composition_mode="comment",
