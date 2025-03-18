@@ -10,15 +10,20 @@ class MailTemplate(models.Model):
 
     use_autosubscribe_followers = fields.Boolean(default=True)
 
-    def generate_recipients(self, results, res_ids):
-        res = super().generate_recipients(results, res_ids)
+    def _generate_template_recipients(
+        self, res_ids, render_fields, find_or_create_partners=False, render_results=None
+    ):
+        res = super()._generate_template_recipients(
+            res_ids, render_fields, find_or_create_partners, render_results
+        )
+
         autosubscribe_followers = (
             self.use_autosubscribe_followers
             and not self.env.context.get("no_autosubscribe_followers")
             # In this case, autosubscribers will be added by
             # :func:`_message_get_default_recipients`
             and not self.use_default_to
-            and not self.env.context.get("tpl_force_default_to")
+            # and not self.env.context.get("tpl_force_default_to") does not exist more
         )
         if autosubscribe_followers:
             for res_id in res.keys():
