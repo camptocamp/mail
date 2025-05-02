@@ -32,6 +32,10 @@ This module implements the capability to keep activities that have been
 completed, for future reporting, by setting them with the boolean
 'Done'.
 
+Since Odoo 18.0, this is supported natively by Odoo, depending on the
+configuration of the activity types. This module ensures that the option
+is active on all existing and new activity types in your setup.
+
 **Table of contents**
 
 .. contents::
@@ -40,15 +44,7 @@ completed, for future reporting, by setting them with the boolean
 Usage
 =====
 
-To use this module, you need to:
-
-1. Access to an activity from the systray activities menu.
-2. Once finished, open the activity and mark it as Done.
-
-To check activities:
-
-1. Go to Settings -> Technical -> Activities
-2. To see finished activities filter by Completed Activities
+To use this module, you do not need to do anything.
 
 Bug Tracker
 ===========
@@ -79,6 +75,7 @@ Contributors
 -  Manuel Regidor <manuel.regidor@sygel.es> (https://www.sygel.es)
 -  Bernat Puig <bernat.puig@forgeflow.com>
    (`www.forgeflow.com <http://www.forgeflow.com>`__)
+-  Stefan Rijnhart <stefan@opener.amsterdam>
 
 Maintainers
 -----------

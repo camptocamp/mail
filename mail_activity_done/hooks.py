@@ -3,40 +3,16 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/lgpl.html).
 
 
-def pre_init_hook(env):
-    """The objective of this hook is to default to false all values of field
-    'done' of mail.activity
-    """
-    cr = env.cr
-    cr.execute(
-        """SELECT column_name
-    FROM information_schema.columns
-    WHERE table_name='mail_activity' AND
-    column_name='done'"""
-    )
-    if not cr.fetchone():
-        cr.execute(
-            """
-            ALTER TABLE mail_activity ADD COLUMN done boolean;
-            """
-        )
-
+def _set_keep_done(cr):
+    """Set keep_done to true for all existing activity types"""
     cr.execute(
         """
-        UPDATE mail_activity
-        SET done = False
+        update mail_activity_type
+        set keep_done = true
+        where keep_done is not true
         """
     )
 
 
-def uninstall_hook(env):
-    """The objective of this hook is to remove all activities that are done
-    upon module uninstall
-    """
-    cr = env.cr
-    cr.execute(
-        """
-        DELETE FROM mail_activity
-        WHERE done=True
-        """
-    )
+def post_init_hook(env):
+    _set_keep_done(env.cr)
