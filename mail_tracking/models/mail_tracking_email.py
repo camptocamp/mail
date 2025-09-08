@@ -8,7 +8,7 @@ import urllib.parse
 import uuid
 from datetime import datetime, timezone
 
-from odoo import _, api, fields, models, tools
+from odoo import api, fields, models, tools
 from odoo.exceptions import AccessError
 from odoo.fields import Command
 from odoo.tools import SQL, email_split
@@ -161,7 +161,7 @@ class MailTrackingEmail(models.Model):
 
     def _make_access_error(self, operation: str) -> AccessError:
         return AccessError(
-            _(
+            self.env._(
                 "The requested operation cannot be completed due to security restrictions. "  # noqa: E501
                 "Please contact your system administrator.\n\n"
                 "(Document type: %(type)s, Operation: %(operation)s)\n\n"
@@ -491,15 +491,6 @@ class MailTrackingEmail(models.Model):
             else:
                 _logger.debug("Concurrent event '%s' discarded", event_type)
         return event_ids
-
-    # TODO Remove useless method
-    @api.model
-    def event_process(self, request, post, metadata, event_type=None):
-        # Generic event process hook, inherit it and
-        # - return 'OK' if processed
-        # - return 'NONE' if this request is not for you
-        # - return 'ERROR' if any error
-        return "NONE"  # pragma: no cover
 
     def _get_old_mail_tracking_email_domain(self, max_age_days):
         target_write_date = fields.Datetime.subtract(
