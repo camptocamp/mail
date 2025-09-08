@@ -29,13 +29,11 @@
         "web.assets_backend": [
             "mail_tracking/static/src/core/chatter/*",
             "mail_tracking/static/src/core/message/*",
-            "mail_tracking/static/src/core/search/*",
             "mail_tracking/static/src/core/discuss/*",
             "mail_tracking/static/src/services/*",
             "mail_tracking/static/src/components/message_tracking/*",
             "mail_tracking/static/src/components/failed_message/*",
             "mail_tracking/static/src/components/failed_message_review/*",
-            "mail_tracking/static/src/components/failed_messages_panel/*",
         ],
     },
     "demo": ["demo/demo.xml"],
