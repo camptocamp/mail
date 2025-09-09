@@ -3,9 +3,12 @@ const {Component, useState} = owl;
 export class MessageTracking extends Component {
     static template = "mail_tracking.MessageTracking";
     static props = ["message", "partner_trackings", "skip_track_links?"];
-    setup() {
-        this.message = useState(this.props.message);
-        this.partner_trackings = useState(this.props.partner_trackings);
+
+    get message() {
+        return this.props.message;
+    }
+    get partner_trackings() {
+        return this.props.partner_trackings ?? [];
     }
     _onTrackingStatusClick(event) {
         const tracking_email_id = event.currentTarget.dataset.tracking;

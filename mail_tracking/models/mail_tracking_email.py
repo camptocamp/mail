@@ -123,22 +123,6 @@ class MailTrackingEmail(models.Model):
         for tracking in self.filtered("mail_message_id"):
             tracking.message_id = tracking.mail_message_id.message_id
 
-    @api.model_create_multi
-    def create(self, vals_list):
-        records = super().create(vals_list)
-        failed_states = self.env["mail.message"].get_failed_states()
-        records.filtered(lambda one: one.state in failed_states).mapped(
-            "mail_message_id"
-        ).write({"mail_tracking_needs_action": True})
-        return records
-
-    def write(self, vals):
-        res = super().write(vals)
-        state = vals.get("state")
-        if state and state in self.env["mail.message"].get_failed_states():
-            self.mapped("mail_message_id").write({"mail_tracking_needs_action": True})
-        return res
-
     @api.model
     def _search(
         self,

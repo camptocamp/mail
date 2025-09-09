@@ -1,32 +1,29 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <templates xml:space="preserve">
+
+    <t
+        t-name="mail_tracking.Message.notification"
+        t-inherit="mail.Message.notification"
+        t-inherit-mode="extension"
+    >
+        <!-- Show the message failure envelope icon in the discuss app -->
+        <xpath expr="//div[1]" position="attributes">
+            <attribute
+                name="t-if"
+                add="(env.inDiscussApp and props.thread?.id === 'failed')"
+                separator=" or "
+            />
+        </xpath>
+    </t>
+
     <t
         t-name="mail_tracking.Message"
         t-inherit="mail.Message"
         t-inherit-mode="extension"
     >
         <xpath expr="//div[hasclass('o-mail-Message-header')]" position="after">
-            <t
-                t-set="has_partner_trackings"
-                t-value="props.message.partner_trackings?.length"
-            />
-            <t
-                t-if="((env.inDiscussApp and props.thread?.id === 'failed') or props.messageSearch) and failed_recipients?.length"
-            >
-                <p class="o_mail_tracking mb-0">
-                    <FailedMessageReview message="props.message" />
-                </p>
-                <div class="o-mail-Activity-info lh-1">
-                    <strong class="text-danger">Failed Recipients: </strong>
-                    <MessageTracking
-                        partner_trackings="failed_recipients"
-                        message="props.message"
-                        skip_track_links="true"
-                    />
-                </div>
-            </t>
             <p
-                t-if="props.message.partner_trackings?.length and !props.messageSearch"
+                t-if="props.message.partner_trackings?.length"
                 class="o_mail_tracking mb-0"
             >
                 <strong>To: </strong>

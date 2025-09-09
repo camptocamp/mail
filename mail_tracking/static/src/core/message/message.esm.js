@@ -10,12 +10,3 @@ Message.components = {
     FailedMessageReview,
     MessageTracking,
 };
-
-patch(Message.prototype, {
-    get failed_recipients() {
-        const error_states = ["error", "rejected", "spam", "bounced", "soft-bounced"];
-        return this.message.partner_trackings.filter((message) => {
-            return error_states.includes(message.status);
-        });
-    },
-});

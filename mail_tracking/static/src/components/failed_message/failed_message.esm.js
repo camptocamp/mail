@@ -31,12 +31,6 @@ export class FailedMessage extends Component {
             additionalContext: {
                 mail_message_to_resend: message.id,
             },
-            onClose: async () => {
-                // Check if message is still 'failed' after Retry
-                await this.orm.call("mail.message", "get_failed_messages", [
-                    [message.id],
-                ]);
-            },
         });
     }
     async onClickJump() {
@@ -81,11 +75,5 @@ export class FailedMessage extends Component {
     }
     get thread() {
         return this.props.message.thread;
-    }
-    get failed_recipients() {
-        const error_states = ["error", "rejected", "spam", "bounced", "soft-bounced"];
-        return this.message.partner_trackings.filter((message) => {
-            return error_states.includes(message.status);
-        });
     }
 }

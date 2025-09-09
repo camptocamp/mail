@@ -5,7 +5,6 @@
 from email.utils import getaddresses
 
 from odoo import api, fields, models
-from odoo.osv import expression
 from odoo.tools import email_split
 
 from odoo.addons.mail.tools.discuss import Store
@@ -25,78 +24,11 @@ class MailMessage(models.Model):
         auto_join=True,
         string="Mail Trackings",
     )
-    mail_tracking_needs_action = fields.Boolean(
-        help="The message tracking will be considered to filter tracking issues",
-        default=False,
-    )
-    is_failed_message = fields.Boolean(
-        compute="_compute_is_failed_message",
-        search="_search_is_failed_message",
-    )
 
     @api.model
     def get_failed_states(self):
         """The 'failed' states of the message"""
         return {"error", "rejected", "spam", "bounced", "soft-bounced"}
-
-    @api.depends(
-        "mail_tracking_needs_action",
-        "author_id",
-        "notification_ids",
-        "mail_tracking_ids",
-        "mail_tracking_ids.state",
-    )
-    def _compute_is_failed_message(self):
-        """Compute 'is_failed_message' field for the active user"""
-        failed_states = self.get_failed_states()
-        for message in self:
-            needs_action = message.mail_tracking_needs_action
-            involves_me = self.env.user.partner_id in (
-                message.author_id | message.notification_ids.res_partner_id
-            )
-            has_failed_trackings = failed_states.intersection(
-                message.mapped("mail_tracking_ids.state")
-            )
-            message.is_failed_message = bool(
-                needs_action and involves_me and has_failed_trackings
-            )
-
-    @api.model
-    def _search_is_failed_message(self, operator, operand):
-        """Search for messages considered failed for the active user.
-        Be notice that 'notificacion_ids' is a record that change if
-        the user mark the message as readed.
-        """
-        pid = self.env.user.partner_id.id
-        self.flush_model(
-            ["author_id", "mail_tracking_ids", "mail_tracking_needs_action"]
-        )
-        self.env["mail.notification"].flush_model(["mail_message_id", "res_partner_id"])
-        self.env["mail.tracking.email"].flush_model(["state"])
-        is_involve = expression.OR(
-            [
-                [
-                    ("notification_ids.res_partner_id", "=", pid),
-                ],
-                [
-                    ("author_id", "=", pid),
-                ],
-            ]
-        )
-        domain = expression.AND(
-            [
-                [
-                    (
-                        "mail_tracking_ids.state",
-                        "in" if operand else "not in",
-                        list(self.get_failed_states()),
-                    ),
-                    ("mail_tracking_needs_action", "=", True),
-                ],
-                is_involve,
-            ]
-        )
-        return domain
 
     def _tracking_status_map_get(self):
         """Map tracking states to be used in chatter"""
@@ -256,54 +188,17 @@ class MailMessage(models.Model):
 
         return list(filter(_filter_alias, mail_list))
 
-    def _prepare_dict_failed_message(self):
-        """Preare values to be used by the chatter widget"""
-        self.ensure_one()
-        failed_trackings = self.mail_tracking_ids.filtered(
-            lambda x: x.state in self.get_failed_states()
-        )
-        if not failed_trackings or not self.mail_tracking_needs_action:
-            return
-        failed_partners = failed_trackings.mapped("partner_id")
-        failed_recipients = failed_partners.read(["display_name"])
-        return {
-            "id": self.id,
-            "date": self.date,
-            "body": self.body,
-            "failed_recipients": failed_recipients,
-        }
-
-    def get_failed_messages(self):
-        """Returns the list of failed messages to be used by the
-        failed_messages widget"""
-        return [
-            msg._prepare_dict_failed_message()
-            for msg in self.sorted("date", reverse=True)
-        ]
-
     def set_need_action_done(self):
         """This will mark the messages to be ignored in the tracking issues filter"""
-        self.check_access("read")
-        self.mail_tracking_needs_action = False
-        self.env.user._bus_send(
-            "mail.tracking/set_need_action_done",
-            {"message_ids": [self.id]},
+        # TODO: Drop this method and rely exclusively on the core mail.resend.message
+        # wizard and its "Ignore all" button.
+        wizard = (
+            self.env["mail.resend.message"]
+            .sudo()
+            .with_context(mail_message_to_resend=self.id)
+            .create({})
         )
-
-    @api.model
-    def get_failed_count(self):
-        """Gets the number of failed messages used on discuss mailbox item"""
-        return self.search_count([("is_failed_message", "=", True)])
-
-    @api.model
-    def get_failed_messsage_info(self, ids, model):
-        msg_ids = self.search([("res_id", "=", ids), ("model", "=", model)])
-        res = [
-            msg._prepare_dict_failed_message()
-            for msg in msg_ids.sorted("date", reverse=True)
-            if msg._prepare_dict_failed_message()
-        ]
-        return res
+        return wizard.cancel_mail_action()
 
     def _extras_to_store(self, store: Store, format_reply):
         res = super()._extras_to_store(store, format_reply=format_reply)
@@ -312,8 +207,6 @@ class MailMessage(models.Model):
                 message,
                 {
                     "partner_trackings": message.tracking_status(),
-                    "mail_tracking_needs_action": message.mail_tracking_needs_action,
-                    "is_failed_message": message.is_failed_message,
                 },
             )
         return res

@@ -8,12 +8,19 @@ class ResUsers(models.Model):
 
     def _init_messaging(self, store):
         res = super()._init_messaging(store)
+        bus_last_id = self.env["bus.bus"].sudo()._bus_last_id()
         store.add(
             {
                 "failed": {
                     "id": "failed",
                     "model": "mail.box",
-                    "counter": self.env["mail.message"].get_failed_count(),
+                    "counter": self.env["mail.message"].search_count(
+                        [
+                            ("has_error", "=", True),
+                            ("author_id", "=", self.partner_id.id),
+                        ]
+                    ),
+                    "counter_bus_id": bus_last_id,
                 }
             }
         )

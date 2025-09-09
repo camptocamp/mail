@@ -73,7 +73,7 @@
                         <div class="o-mail-Activity-info lh-1">
                             <strong class="text-danger">Failed Recipients: </strong>
                             <MessageTracking
-                                partner_trackings="failed_recipients"
+                                partner_trackings="message.failedRecipients"
                                 message="message"
                                 skip_track_links="true"
                             />

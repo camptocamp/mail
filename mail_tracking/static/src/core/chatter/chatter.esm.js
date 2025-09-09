@@ -18,11 +18,6 @@ const ChatterPatch = {
             showFailedMessageList: true,
         });
     },
-    get failed_messages() {
-        return this.state.thread?.messages.filter((message) => {
-            return message.is_failed_message;
-        });
-    },
     toggleFailedMessageList() {
         this.state.showFailedMessageList = !this.state.showFailedMessageList;
     },

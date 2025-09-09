@@ -13,7 +13,10 @@ class MailTrackingMailBoxController(MailboxController):
     ):
         """Fetch failed messages for discuss"""
         res = request.env["mail.message"]._message_fetch(
-            [("is_failed_message", "=", True)],
+            [
+                ("has_error", "=", True),
+                ("author_id", "=", request.env.user.partner_id.id),
+            ],
             search_term=search_term,
             before=before,
             after=after,

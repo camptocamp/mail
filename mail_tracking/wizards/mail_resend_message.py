@@ -44,16 +44,3 @@ class MailResendMessage(models.TransientModel):
                 ]
                 rec["partner_ids"].extend(partner_commands)
         return rec
-
-    def resend_mail_action(self):
-        for wizard in self:
-            to_send = wizard.partner_ids.filtered("resend").mapped("partner_id")
-            if to_send:
-                # Set as reviewed
-                wizard.mail_message_id.mail_tracking_needs_action = False
-                # Reset mail.tracking.email state
-                tracking_ids = wizard.mail_message_id.mail_tracking_ids.filtered(
-                    lambda x, to_send=to_send: x.partner_id in to_send
-                )
-                tracking_ids.sudo().write({"state": False})
-        return super().resend_mail_action()

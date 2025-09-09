@@ -16,22 +16,12 @@ class MailThread(models.AbstractModel):
         "mail.message",
         "res_id",
         string="Failed Messages",
-        domain=lambda self: [("model", "=", self._name)]
-        + self._get_failed_message_domain(),
+        domain=lambda self: [("model", "=", self._name), ("has_error", "=", True)],
     )
 
     def _get_message_create_valid_field_names(self):
         valid_field_names = super()._get_message_create_valid_field_names()
         return valid_field_names | {"email_to", "email_cc"}
-
-    def _get_failed_message_domain(self):
-        """Domain used to display failed messages on the 'failed_messages'
-        widget"""
-        failed_states = self.env["mail.message"].get_failed_states()
-        return [
-            ("mail_tracking_needs_action", "=", True),
-            ("mail_tracking_ids.state", "in", list(failed_states)),
-        ]
 
     @api.model
     def _message_route_process(self, message, message_dict, routes):
@@ -119,20 +109,7 @@ class MailThread(models.AbstractModel):
                 {
                     "string": self.env._("Failed sent messages"),
                     "name": "failed_message_ids",
-                    "domain": str(
-                        [
-                            [
-                                "failed_message_ids.mail_tracking_ids.state",
-                                "in",
-                                list(self.env["mail.message"].get_failed_states()),
-                            ],
-                            [
-                                "failed_message_ids.mail_tracking_needs_action",
-                                "=",
-                                True,
-                            ],
-                        ]
-                    ),
+                    "domain": str([("has_error", "=", True)]),
                 },
             )
             nodes[0].append(etree.Element("separator"))

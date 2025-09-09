@@ -17,7 +17,7 @@
                         t-if="!state.showFailedMessageList"
                         class="badge rounded-pill ms-2 text-bg-danger"
                     >
-                        <t t-esc="failed_messages.length" />
+                        <t t-esc="state.thread?.failedMessages.length" />
                     </span>
                 </div>
                 <hr class="flex-grow-1 fe-3" />
@@ -25,7 +25,7 @@
             <t t-if="state.showFailedMessageList">
                 <div class="o-mail-MessageCardList d-flex flex-column">
                     <t
-                        t-foreach="failed_messages"
+                        t-foreach="state.thread?.failedMessages"
                         t-as="failed_message"
                         t-key="failed_message.id"
                     >
@@ -45,7 +45,9 @@
         t-inherit-mode="extension"
     >
         <xpath expr="//t[@t-call='mail.ActivityList']/.." position="after">
-            <t t-if="failed_messages?.length and !state.isSearchOpen">
+            <t
+                t-if="state.thread.isLoaded and state.thread?.failedMessages?.length and !state.isSearchOpen"
+            >
                 <t t-call="mail_tracking.FailedMessageList" />
             </t>
         </xpath>

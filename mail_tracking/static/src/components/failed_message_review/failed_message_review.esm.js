@@ -7,34 +7,20 @@ export class FailedMessageReview extends Component {
     static template = "mail_tracking.FailedMessageReview";
 
     setup() {
-        this.message = useState(this.props.message);
         this.orm = useService("orm");
     }
     async setFailedMessageReviewed() {
+        // TODO: Drop this method and rely exclusively on the core mail.resend.message
+        // wizard and its "Ignore all" button.
         await this.orm.call("mail.message", "set_need_action_done", [
-            [this.message.id],
+            [this.props.message.id],
         ]);
     }
     retryFailedMessage() {
         this.env.services.action.doAction("mail.mail_resend_message_action", {
             additionalContext: {
-                mail_message_to_resend: this.message.id,
+                mail_message_to_resend: this.props.message.id,
             },
-            onClose: async () => {
-                // Check if message is still 'failed' after Retry
-                await this.orm.call("mail.message", "get_failed_messages", [
-                    [this.message.id],
-                ]);
-            },
-        });
-    }
-    get thread() {
-        return this.props.message.thread;
-    }
-    get failed_recipients() {
-        const error_states = ["error", "rejected", "spam", "bounced", "soft-bounced"];
-        return this.message.partner_trackings.filter((message) => {
-            return error_states.includes(message.status);
         });
     }
 }

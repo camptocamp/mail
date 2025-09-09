@@ -21,7 +21,6 @@
         "security/ir.model.access.csv",
         "views/mail_tracking_email_view.xml",
         "views/mail_tracking_event_view.xml",
-        "views/mail_message_view.xml",
         "views/res_partner_view.xml",
         "views/res_config_settings.xml",
     ],

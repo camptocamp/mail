@@ -327,22 +327,24 @@ class TestMailTracking(TransactionCase):
         MailMessageObj = self.env["mail.message"]
         # Create message
         mail, tracking = self.mail_send(self.recipient.email)
-        self.assertFalse(tracking.mail_message_id.mail_tracking_needs_action)
+        self.assertFalse(tracking.mail_message_id.has_error)
         # Force error state
         tracking.state = "error"
-        self.assertTrue(tracking.mail_message_id.mail_tracking_needs_action)
-        failed_count = MailMessageObj.get_failed_count()
+        self.assertTrue(tracking.mail_message_id.has_error)
+        failed_count = MailMessageObj.search_count([("has_error", "=", True)])
         self.assertTrue(failed_count > 0)
         values = tracking.mail_message_id.get_failed_messages()
         self.assertEqual(values[0]["id"], tracking.mail_message_id.id)
         messages = MailMessageObj.search([])
-        messages_failed = MailMessageObj.search([["is_failed_message", "=", True]])
+        messages_failed = MailMessageObj.search([["has_error", "=", True]])
         self.assertTrue(messages)
         self.assertTrue(messages_failed)
         self.assertTrue(len(messages) > len(messages_failed))
-        tracking.mail_message_id.set_need_action_done()
-        self.assertFalse(tracking.mail_message_id.mail_tracking_needs_action)
-        self.assertTrue(MailMessageObj.get_failed_count() < failed_count)
+        # TODO: Cancel the notification
+        # tracking.mail_message_id.set_need_action_done()
+        self.assertFalse(tracking.mail_message_id.has_error)
+        new_failed_count = MailMessageObj.search_count([("has_error", "=", True)])
+        self.assertTrue(new_failed_count < failed_count)
         # No author_id
         tracking.mail_message_id.author_id = False
         values = tracking.mail_message_id.get_failed_messages()[0]
@@ -753,16 +755,14 @@ class TestMailTracking(TransactionCase):
         tracking_email.state = "error"
 
         # employee_1 should read/search failed msg
-        failed_msg = message.with_user(user_employee_1).read(
-            fields=["is_failed_message"]
-        )
-        self.assertTrue(failed_msg[0]["is_failed_message"])
+        failed_msg = message.with_user(user_employee_1).read(fields=["has_error"])
+        self.assertTrue(failed_msg[0]["has_error"])
         self.assertTrue(
             self.env["mail.message"]
             .with_user(user_employee_1)
             .search(
                 [
-                    ("is_failed_message", "=", True),
+                    ("has_error", "=", True),
                 ]
             )
         )
@@ -771,7 +771,7 @@ class TestMailTracking(TransactionCase):
             .with_user(user_employee_2)
             .search(
                 [
-                    ("is_failed_message", "=", True),
+                    ("has_error", "=", True),
                 ]
             )
         )
