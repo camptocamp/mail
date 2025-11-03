@@ -25,13 +25,20 @@ class MailThread(models.AbstractModel):
     # NOTIFICATION API
     # ------------------------------------------------------
 
-    def _notify_by_email_get_base_mail_values(self, message, additional_values=None):
+    # this method change on odoo 19.0
+    # def _notify_by_email_get_base_mail_values(self, message,
+    #   recipients_data, additional_values=None):
+    # TODO verify the code with the change doc_to_followers
+
+    def _notify_by_email_get_base_mail_values(
+        self, message, recipients_data, additional_values=None
+    ):
         """
         This is to add cc, bcc addresses to mail.mail objects so that email
         can be sent to those addresses.
         """
         res = super()._notify_by_email_get_base_mail_values(
-            message, additional_values=additional_values
+            message, recipients_data, additional_values=additional_values
         )
         context = self.env.context
         skip_adding_cc_bcc = context.get("skip_adding_cc_bcc", False)
@@ -48,7 +55,7 @@ class MailThread(models.AbstractModel):
 
         return res
 
-    def _notify_get_recipients(self, message, msg_vals, **kwargs):
+    def _notify_get_recipients(self, message, msg_vals=False, **kwargs):
         """
         This is to add cc, bcc recipients so that they can be grouped with
         other recipients.

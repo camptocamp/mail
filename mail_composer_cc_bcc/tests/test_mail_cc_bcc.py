@@ -10,7 +10,7 @@ from odoo.tests.common import TransactionCase
 from odoo.addons.mail.tests.common import MailCase
 from odoo.addons.mail.tests.test_mail_composer import TestMailComposerForm
 from odoo.addons.mail.wizard.mail_compose_message import (
-    MailComposer as MailComposer_upstream,
+    MailComposeMessage as MailComposeMessage_upstream,
 )
 
 VALID_HASHES = {
@@ -43,10 +43,10 @@ class TestMailCcBcc(TestMailComposerForm):
         form.body = "<p>Hello</p>"
         return form
 
-    def test_MailComposer_upstream_file_hash(self):
+    def test_MailComposeMessage_upstream_file_hash(self):
         """Test that copied upstream function hasn't received fixes"""
         _compute_partner_ids = inspect.getsource(
-            MailComposer_upstream._compute_partner_ids
+            MailComposeMessage_upstream._compute_partner_ids
         ).encode()
         func_hash = hashlib.md5(_compute_partner_ids).hexdigest()
         self.assertIn(func_hash, VALID_HASHES.get("mail.composer:_compute_partner_ids"))
