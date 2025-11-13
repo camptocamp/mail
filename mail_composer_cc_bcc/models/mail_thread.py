@@ -25,11 +25,6 @@ class MailThread(models.AbstractModel):
     # NOTIFICATION API
     # ------------------------------------------------------
 
-    # this method change on odoo 19.0
-    # def _notify_by_email_get_base_mail_values(self, message,
-    #   recipients_data, additional_values=None):
-    # TODO verify the code with the change doc_to_followers
-
     def _notify_by_email_get_base_mail_values(
         self, message, recipients_data, additional_values=None
     ):
@@ -96,13 +91,12 @@ class MailThread(models.AbstractModel):
                 pdata = {
                     "id": data.get("id"),
                     "active": data.get("active"),
-                    "share": data.get("share"),
                     "notif": data.get("notif") and data.get("notif") or notif,
                     "type": msg_type,
                     "is_follower": data.get("is_follower"),
-                    "uid": False,
                 }
-                rdata.append(pdata)
+                data.update(pdata)
+                rdata.append(data)
         return rdata
 
     def _notify_get_recipients_classify(
@@ -116,19 +110,15 @@ class MailThread(models.AbstractModel):
         if not is_from_composer or skip_adding_cc_bcc:
             return res
         ids = []
-        customer_data = None
+        customer_data = []
         for rcpt_data in res:
             if rcpt_data["notification_group_name"] == "customer":
-                customer_data = rcpt_data
-            else:
-                ids += rcpt_data["recipients"]
+                customer_data.append(rcpt_data)
         if not customer_data:
             customer_data = res[0]
             customer_data["notification_group_name"] = "customer"
-            customer_data["recipients"] = ids
-        else:
-            customer_data["recipients"] += ids
-        return [customer_data]
+            customer_data["recipients_ids"] = ids
+        return customer_data
 
     def _notify_thread(self, message, msg_vals=False, **kwargs):
         if message.message_type == "notification":

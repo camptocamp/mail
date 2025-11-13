@@ -25,10 +25,6 @@ class MailMail(models.Model):
 
     email_bcc = fields.Char("Bcc", help="Blind Cc message recipients")
 
-    # this method change on odoo 19.0
-    #  def _prepare_outgoing_list(self, mail_server=False, doc_to_followers=None):
-    # TODO verify the code with the change doc_to_followers
-
     def _prepare_outgoing_list(self, mail_server=False, doc_to_followers=None):
         # First, return if we're not coming from the Mail Composer
         res = super()._prepare_outgoing_list(
@@ -64,7 +60,10 @@ class MailMail(models.Model):
                 # - Also note that in python3, the smtp.send_message method does not
                 #   transmit the Bcc field of a Message object
                 if rcpt_to in email_bcc:
-                    m["headers"].update({"X-Odoo-Bcc": m["email_to"][0]})
+                    if "X-Odoo-Bcc" not in m["headers"]:
+                        m["headers"].update({"X-Odoo-Bcc": m["email_to"][0]})
+                    else:
+                        m["headers"]["X-Odoo-Bcc"] += ", " + m["email_to"][0]
 
             # in the absence of self.email_to, Odoo creates one special mail for CC
             # see https://github.com/odoo/odoo/commit/46bad8f0
@@ -82,7 +81,7 @@ class MailMail(models.Model):
                 }
             )
 
-        self.env.context = {**self.env.context, "recipients": list(recipients)}
+        self = self.with_context(recipients=list(recipients))
 
         if len(res) > len(recipients):
             res.pop()
