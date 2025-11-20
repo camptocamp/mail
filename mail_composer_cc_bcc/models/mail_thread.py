@@ -26,14 +26,16 @@ class MailThread(models.AbstractModel):
     # ------------------------------------------------------
 
     def _notify_by_email_get_base_mail_values(
-        self, message, recipients_data, additional_values=None
+        self, message, partners_data, additional_values=None
     ):
         """
         This is to add cc, bcc addresses to mail.mail objects so that email
         can be sent to those addresses.
         """
+        for pd in partners_data:
+            pd.setdefault("email_normalized", pd.get("email") or "")
         res = super()._notify_by_email_get_base_mail_values(
-            message, recipients_data, additional_values=additional_values
+            message, partners_data, additional_values=additional_values
         )
         context = self.env.context
         skip_adding_cc_bcc = context.get("skip_adding_cc_bcc", False)
@@ -50,7 +52,7 @@ class MailThread(models.AbstractModel):
 
         return res
 
-    def _notify_get_recipients(self, message, msg_vals=False, **kwargs):
+    def _notify_get_recipients(self, message, msg_vals, **kwargs):
         """
         This is to add cc, bcc recipients so that they can be grouped with
         other recipients.
@@ -91,12 +93,13 @@ class MailThread(models.AbstractModel):
                 pdata = {
                     "id": data.get("id"),
                     "active": data.get("active"),
+                    "share": data.get("share"),
                     "notif": data.get("notif") and data.get("notif") or notif,
                     "type": msg_type,
                     "is_follower": data.get("is_follower"),
+                    "uid": False,
                 }
-                data.update(pdata)
-                rdata.append(data)
+                rdata.append(pdata)
         return rdata
 
     def _notify_get_recipients_classify(
@@ -110,15 +113,20 @@ class MailThread(models.AbstractModel):
         if not is_from_composer or skip_adding_cc_bcc:
             return res
         ids = []
-        customer_data = []
+        customer_data = None
         for rcpt_data in res:
             if rcpt_data["notification_group_name"] == "customer":
-                customer_data.append(rcpt_data)
+                customer_data = rcpt_data
+            else:
+                ids += rcpt_data["recipients_ids"]
         if not customer_data:
             customer_data = res[0]
             customer_data["notification_group_name"] = "customer"
             customer_data["recipients_ids"] = ids
-        return customer_data
+        else:
+            customer_data.setdefault("recipients_ids", [])
+            customer_data["recipients_ids"] += ids
+        return [customer_data]
 
     def _notify_thread(self, message, msg_vals=False, **kwargs):
         if message.message_type == "notification":

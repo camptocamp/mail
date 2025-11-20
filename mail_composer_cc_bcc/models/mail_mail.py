@@ -28,8 +28,7 @@ class MailMail(models.Model):
     def _prepare_outgoing_list(self, mail_server=False, doc_to_followers=None):
         # First, return if we're not coming from the Mail Composer
         res = super()._prepare_outgoing_list(
-            mail_server=mail_server,
-            doc_to_followers=doc_to_followers,
+            mail_server=mail_server, doc_to_followers=doc_to_followers
         )
         is_out_of_scope = len(self.ids) > 1
         is_from_composer = self.env.context.get("is_from_composer", False)
@@ -60,10 +59,7 @@ class MailMail(models.Model):
                 # - Also note that in python3, the smtp.send_message method does not
                 #   transmit the Bcc field of a Message object
                 if rcpt_to in email_bcc:
-                    if "X-Odoo-Bcc" not in m["headers"]:
-                        m["headers"].update({"X-Odoo-Bcc": m["email_to"][0]})
-                    else:
-                        m["headers"]["X-Odoo-Bcc"] += ", " + m["email_to"][0]
+                    m["headers"].update({"X-Odoo-Bcc": m["email_to"][0]})
 
             # in the absence of self.email_to, Odoo creates one special mail for CC
             # see https://github.com/odoo/odoo/commit/46bad8f0
@@ -80,8 +76,6 @@ class MailMail(models.Model):
                     "email_cc": email_cc,
                 }
             )
-
-        self = self.with_context(recipients=list(recipients))
 
         if len(res) > len(recipients):
             res.pop()

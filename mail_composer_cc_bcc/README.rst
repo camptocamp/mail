@@ -45,11 +45,11 @@ all headers (To, Cc, Bcc) in all emails
 Features
 --------
 
--  Add Cc and Bcc fields to company form to use them as default in mail
-   composer form.
--  Add Bcc field to mail template form. Use Cc and Bcc fields to lookup
-   partners by email then add them to corresponding fields in mail
-   composer form.
+- Add Cc and Bcc fields to company form to use them as default in mail
+  composer form.
+- Add Bcc field to mail template form. Use Cc and Bcc fields to lookup
+  partners by email then add them to corresponding fields in mail
+  composer form.
 
 .. IMPORTANT::
    This is an alpha version, the data model and design can change at any time without warning.
@@ -113,18 +113,18 @@ Authors
 Contributors
 ------------
 
--  `Trobz <https://www.trobz.com>`__:
+- `Trobz <https://www.trobz.com>`__:
 
-      -  Hai N. Le <hailn@trobz.com>
-      -  Son Ho <sonhd@trobz.com>
-      -  Tri Doan <tridm@trobz.com>
+     - Hai N. Le <hailn@trobz.com>
+     - Son Ho <sonhd@trobz.com>
+     - Tri Doan <tridm@trobz.com>
 
--  Alberto Nieto alberto.nieto@braintec.com (https://braintec.com)
+- Alberto Nieto alberto.nieto@braintec.com (https://braintec.com)
 
--  `Camptocamp <https://www.camptocamp.com>`__:
+- `Camptocamp <https://www.camptocamp.com>`__:
 
-      -  Cyril Jeanneret <cyril.jeanneret@camptocam.com>
-      -  Italo Lopes <italo.lopes@camptocam.com>
+     - Cyril Jeanneret <cyril.jeanneret@camptocam.com>
+     - Italo Lopes <italo.lopes@camptocam.com>
 
 Other credits
 -------------
