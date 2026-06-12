@@ -6,3 +6,4 @@
 - Manuel Regidor \<<manuel.regidor@sygel.es>\> (<https://www.sygel.es>)
 - Bernat Puig \<<bernat.puig@forgeflow.com>\> (www.forgeflow.com)
 - Stefan Rijnhart \<<stefan@opener.amsterdam>\>
+- Shamnas Koyani \<<shamnaskoyani@gmail.com>\>
