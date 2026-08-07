@@ -10,3 +10,11 @@ To use this module, follow these steps:
 
 The message goes through the standard mail gateway and the created record (e.g. a
 Helpdesk ticket) appears, just as if the email had been received.
+
+To replay a real email instead of composing one:
+
+- Click **Replay Email File** (button on the form, or the *Action* menu).
+- Upload the message file, then click **Process**.
+
+The file is sent to the gateway as if it was received through fetchmail.
+Malformed HTML and unusual headers are preserved.
