@@ -379,6 +379,10 @@ fetched from a server, it is then routed by alias and creates the target
 record (helpdesk ticket, lead, task, …).</p>
 <p>It is meant for testing mail-driven flows on environments that have no
 inbound mail server, like test instances.</p>
+<p>It also adds a <strong>Replay Email File</strong> button, which takes a raw message
+file (usually a <tt class="docutils literal">.eml</tt> exported from a mail client) and feeds it to
+the gateway untouched. Useful to reproduce how a specific email that a
+customer received was handled, byte for byte.</p>
 <p><strong>Table of contents</strong></p>
 <div class="contents local topic" id="contents">
 <ul class="simple">
@@ -411,6 +415,14 @@ team alias.</li>
 <p>The message goes through the standard mail gateway and the created
 record (e.g. a Helpdesk ticket) appears, just as if the email had been
 received.</p>
+<p>To replay a real email instead of composing one:</p>
+<ul class="simple">
+<li>Click <strong>Replay Email File</strong> (button on the form, or the <em>Action</em>
+menu).</li>
+<li>Upload the message file, then click <strong>Process</strong>.</li>
+</ul>
+<p>The file is sent to the gateway as if it was received through fetchmail.
+Malformed HTML and unusual headers are preserved.</p>
 </div>
 <div class="section" id="bug-tracker">
 <h1><a class="toc-backref" href="#toc-entry-2">Bug Tracker</a></h1>
