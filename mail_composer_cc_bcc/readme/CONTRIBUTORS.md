@@ -9,4 +9,4 @@
 
   > - Cyril Jeanneret \<<cyril.jeanneret@camptocam.com>\>
   > - Italo Lopes \<<italo.lopes@camptocam.com>\>
-
+- Alex Abbas Deselaers \<<skanndar@skanndar.top>\>
