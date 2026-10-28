@@ -1,0 +1,350 @@
+# Copyright 2026 Camptocamp SA
+# License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
+
+from collections import Counter
+
+from odoo import Command
+from odoo.tools import email_normalize, email_split
+
+from odoo.addons.mail.tests.common import MailCase
+
+
+class TestMailCcBccRecipients(MailCase):
+    """Sending from the composer to To, Cc and Bcc recipients must always give:
+
+    * exactly one email per recipient,
+    * the same To and Cc headers on every email,
+    * a Bcc header on the Bcc recipients' emails only.
+
+    Odoo may split the notification into one mail.mail per lang to render the
+    layout in each lang. That is fine, but must not change any of the above:
+    each recipient still belongs to exactly one mail.mail.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        for code in ("fr_FR", "de_DE", "es_ES"):
+            cls.env["res.lang"]._activate_lang(code)
+        cls.record = cls.env["res.partner"].create(
+            {"name": "Document", "email": "document@example.com"}
+        )
+        # us1 belongs to both lists, hence 7 partners for 2 lists of 4
+        cls.us1 = cls._create_partner("us1", "en_US")
+        cls.us2 = cls._create_partner("us2", "en_US")
+        cls.us3 = cls._create_partner("us3", "en_US")
+        cls.us4 = cls._create_partner("us4", "en_US")
+        cls.fr = cls._create_partner("fr", "fr_FR")
+        cls.de = cls._create_partner("de", "de_DE")
+        cls.es = cls._create_partner("es", "es_ES")
+
+        cls.partners_same_lang = cls.us1 + cls.us2 + cls.us3 + cls.us4
+        cls.partners_different_langs = cls.us1 + cls.fr + cls.de + cls.es
+
+    # ------------------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------------------
+
+    @classmethod
+    def _create_partner(cls, prefix, lang):
+        return cls.env["res.partner"].create(
+            {
+                "name": prefix.upper(),
+                "email": f"{prefix.lower()}@example.com",
+                "lang": lang,
+            }
+        )
+
+    def _send(
+        self, subject, partners_to, partners_cc, partners_bcc, mail_unlink_sent=False
+    ):
+        """Send one composer message, any number of To / Cc / Bcc partners"""
+        composer = (
+            self.env["mail.compose.message"]
+            .with_context(
+                default_model=self.record._name,
+                default_res_ids=self.record.ids,
+                default_composition_mode="comment",
+                mail_notify_force_send=True,
+            )
+            .create(
+                {
+                    "subject": subject,
+                    "body": "<p>Hello</p>",
+                    "partner_ids": [Command.set(partners_to.ids)],
+                    "partner_cc_ids": [Command.set(partners_cc.ids)],
+                    "partner_bcc_ids": [Command.set(partners_bcc.ids)],
+                }
+            )
+        )
+        with self.mock_mail_gateway(mail_unlink_sent=mail_unlink_sent):
+            composer._action_send_mail()
+        return self.record.message_ids.filtered(lambda m: m.subject == subject)[:1]
+
+    def _send_from_followers(
+        self, subject, partners_to, partners_cc, partners_bcc, mail_unlink_sent=False
+    ):
+        """Send with no explicit To: the recipients are followers of the record"""
+        self.record.message_subscribe(partner_ids=partners_to.ids)
+        composer = (
+            self.env["mail.compose.message"]
+            .with_context(
+                default_model=self.record._name,
+                default_res_ids=self.record.ids,
+                default_composition_mode="comment",
+                mail_notify_force_send=True,
+            )
+            .create(
+                {
+                    "subject": subject,
+                    "body": "<p>Hello</p>",
+                    "partner_cc_ids": [Command.set(partners_cc.ids)],
+                    "partner_bcc_ids": [Command.set(partners_bcc.ids)],
+                }
+            )
+        )
+        with self.mock_mail_gateway(mail_unlink_sent=mail_unlink_sent):
+            composer._action_send_mail()
+        return self.record.message_ids.filtered(lambda m: m.subject == subject)[:1]
+
+    def _assert_emails_defined(self):
+        assert hasattr(self, "emails"), (
+            "self.emails undefined. Did you use _send method ?"
+        )
+        assert self.emails, "No email was sent"
+
+    def _envelope_recipients(self):
+        """Who each sent email is actually for (RCPT TO), one entry per email"""
+        # NOTE: `To` != `RCPT TO`
+        self._assert_emails_defined()
+        return [addr for email in self.emails for addr in email["smtp_to_list"]]
+
+    def _assert_one_email_per_recipient(self, partners):
+        expected = Counter(partners.mapped("email"))
+        received = Counter(self._envelope_recipients())
+        if received == expected:
+            return
+        report = ["Each recipient must get exactly 1 email:"]
+        for address in sorted(set(expected) | set(received)):
+            got = received.get(address, 0)
+            wanted = expected.get(address, 0)
+            flag = "  <-- WRONG" if got != wanted else ""
+            report.append(f"    {address}: got {got}, expected {wanted}{flag}")
+        report.append(
+            f"  total sent: {sum(received.values())}, expected {len(partners)}"
+        )
+        self.fail("\n".join(report))
+
+    def _assert_each_recipient_in_one_mail(self, message, partners):
+        """Whatever the lang split, a recipient belongs to a single mail.mail"""
+        received = Counter(
+            partner.email for mail in message.mail_ids for partner in mail.recipient_ids
+        )
+        expected = Counter(partners.mapped("email"))
+        if received == expected:
+            return
+        report = ["Each recipient must belong to exactly 1 mail.mail:"]
+        for mail in message.mail_ids:
+            report.append(f"    mail.mail: {mail.recipient_ids.mapped('email')}")
+        for address in sorted(set(expected) | set(received)):
+            report.append(
+                f"    {address}: in {received.get(address, 0)} mail.mail, "
+                f"expected {expected.get(address, 0)}"
+            )
+        self.fail("\n".join(report))
+
+    def _assert_same_to_cc_headers(self, partners_to, partners_cc):
+        self._assert_emails_defined()
+        # To is built from a list and Cc from a joined string, and the partners
+        # come out in no guaranteed order: compare addresses, not text.
+        for header, expected in (("msg_to", partners_to), ("msg_cc", partners_cc)):
+            values = {
+                tuple(
+                    sorted(email_normalize(a) for a in email_split(email[header] or ""))
+                )
+                for email in self.emails
+            }
+            self.assertEqual(
+                len(values),
+                1,
+                f"Every email must show the same {header}, got {sorted(values)}",
+            )
+            self.assertEqual(sorted(values.pop()), sorted(expected.mapped("email")))
+
+    def _assert_bcc_header_on_bcc_emails_only(self, partners_bcc):
+        values = [(mail.get("headers") or {}).get("Bcc") for mail in self._mails]
+        found = sorted(email_normalize(value) for value in values if value)
+        self.assertEqual(
+            found,
+            sorted(partners_bcc.mapped("email")),
+            "Only the Bcc recipients' emails carry a Bcc header, one each",
+        )
+
+    def _assert_bcc_never_transmitted(self):
+        """The Bcc header must be stripped before the email leaves Odoo"""
+        self._assert_emails_defined()
+        for email in self.emails:
+            self.assertFalse(
+                email.get("message") and "\nBcc:" in email["message"],
+                "The Bcc header must never be transmitted",
+            )
+
+    def _assert_headers(self, partners_to, partners_cc, partners_bcc):
+        """Assertions on the sent emails only, no mail.mail needed"""
+        self._assert_one_email_per_recipient(partners_to + partners_cc + partners_bcc)
+        self._assert_same_to_cc_headers(partners_to, partners_cc)
+        self._assert_bcc_header_on_bcc_emails_only(partners_bcc)
+        self._assert_bcc_never_transmitted()
+
+    def _assert_mails(self, message, partners_to, partners_cc, partners_bcc):
+        self._assert_each_recipient_in_one_mail(
+            message, partners_to + partners_cc + partners_bcc
+        )
+        self._assert_headers(partners_to, partners_cc, partners_bcc)
+
+    # ------------------------------------------------------------
+    # TESTS
+    # ------------------------------------------------------------
+
+    def test_same_lang(self):
+        """4 recipients sharing one lang: a single mail.mail, 4 emails"""
+        partners_to, cc_1, cc_2, partners_bcc = self.partners_same_lang
+        partners_cc = cc_1 + cc_2
+        message = self._send("same-lang", partners_to, partners_cc, partners_bcc)
+
+        self.assertEqual(len(message.mail_ids), 1, "One lang means one mail.mail")
+        self._assert_mails(message, partners_to, partners_cc, partners_bcc)
+
+    def test_several_to_in_different_langs(self):
+        """Two To in two langs still see each other in their To header"""
+        partners_to = self.us1 + self.fr
+        partners_cc = self.de
+        partners_bcc = self.es
+        message = self._send("many-to", partners_to, partners_cc, partners_bcc)
+
+        self._assert_mails(message, partners_to, partners_cc, partners_bcc)
+
+    def test_different_langs(self):
+        """4 recipients, 4 langs: the split may happen, the emails must not change"""
+        partners_to, cc_1, cc_2, partners_bcc = self.partners_different_langs
+        partners_cc = cc_1 + cc_2
+        message = self._send("different-langs", partners_to, partners_cc, partners_bcc)
+
+        self._assert_mails(message, partners_to, partners_cc, partners_bcc)
+
+    def test_followers_are_to_recipients(self):
+        """Followers get the email, though they never reach partner_ids"""
+        partners_to = self.us1 + self.fr
+        message = self._send_from_followers("followers", partners_to, self.de, self.es)
+
+        self.assertFalse(
+            message.partner_ids, "Followers are not added to partner_ids by Odoo"
+        )
+        self._assert_mails(message, partners_to, self.de, self.es)
+
+    def test_to_header_survives_sent_mails_being_unlinked(self):
+        """Sent mails are unlinked: the last one must still show every To
+
+        mail_unlink_sent is what production does, MailCase disables it.
+        """
+        partners_to, cc_1, cc_2, partners_bcc = self.partners_different_langs
+        partners_cc = cc_1 + cc_2
+        self._send(
+            "unlinked",
+            partners_to,
+            partners_cc,
+            partners_bcc,
+            mail_unlink_sent=True,
+        )
+        # no _assert_mails here: the mail.mail are gone, only the emails remain
+        self._assert_headers(partners_to, partners_cc, partners_bcc)
+
+    def test_resend_keeps_the_cc_bcc_handling(self):
+        """Re-sending the same mail.mail must not fall back to core
+
+        The standard Retry button of Settings > Technical > Emails is
+        `mark_outgoing()` followed by the queue (`process_email_queue`), and it
+        runs without the `is_from_composer` context key. When the whole Cc /
+        Bcc handling was keyed on that key, the retry rebuilt the emails the
+        core way: it merged the stored `X-Msg-To-Add` header -- which lists
+        every external recipient, *Bcc partners included* -- into `To`, and
+        brought back the Cc-only duplicate email.
+        """
+        partners_to, cc_1, cc_2, partners_bcc = self.partners_same_lang
+        partners_cc = cc_1 + cc_2
+        message = self._send("resend", partners_to, partners_cc, partners_bcc)
+        self._assert_mails(message, partners_to, partners_cc, partners_bcc)
+
+        mails = message.mail_ids
+        self.assertTrue(mails, "MailCase keeps the sent mail.mail around")
+        mails.mark_outgoing()
+        with self.mock_mail_gateway():
+            self.env["mail.mail"].process_email_queue(email_ids=mails.ids)
+
+        bcc_addresses = set(partners_bcc.mapped("email"))
+        for email in self.emails:
+            disclosed = bcc_addresses & {
+                email_normalize(address)
+                for address in email_split(email["msg_to"] or "")
+            }
+            self.assertFalse(
+                disclosed,
+                f"Bcc recipients disclosed in the To header of a resent email: "
+                f"{sorted(disclosed)} in {email['msg_to']!r}",
+            )
+        self._assert_headers(partners_to, partners_cc, partners_bcc)
+
+    def test_no_recipient_left_refuses_to_send(self):
+        """Not knowing the recipient must raise, never fall back to To+Cc+Bcc
+
+        The fallback would send to everyone at once and disclose the Bcc.
+        """
+        mail_server = self.env["ir.mail_server"]
+        message = mail_server._build_email__(
+            email_from="sender@example.com",
+            email_to=[self.us1.email],
+            subject="no-recipient-left",
+            body="<p>Hello</p>",
+            email_cc=[self.de.email],
+            email_bcc=[self.es.email],
+        )
+        server = mail_server.with_context(is_from_composer=True, send_validated_to=[])
+        with self.assertRaises(ValueError):
+            server._prepare_email_message__(message, None)
+
+    def test_mixed_case_addresses_are_delivered(self):
+        """An address stored with upper-case letters must still be delivered
+
+        Odoo 19 restricts the envelope of each email to its normalized
+        (lower-cased) recipient: To / Cc / Bcc built from the raw address
+        never matched it, and that recipient silently got nothing.
+        """
+        P = self.env["res.partner"]
+        to = P.create({"name": "Mixed To", "email": "Mixed.To@Example.com"})
+        cc = P.create({"name": "Mixed Cc", "email": "Mixed.Cc@Example.com"})
+        bcc = P.create({"name": "Mixed Bcc", "email": "Mixed.Bcc@Example.com"})
+        self._send("mixed-case", to, cc, bcc)
+        self.assertEqual(
+            Counter(self._envelope_recipients()),
+            Counter(email_normalize(p.email) for p in to + cc + bcc),
+            "each recipient must get exactly 1 email, whatever the case",
+        )
+
+    def test_cc_bcc_recipients_data_carry_the_email(self):
+        """Cc / Bcc partners added by the composer follow core's contract
+
+        Any override of ``_notify_get_recipients`` that skips recipients
+        without an address relies on ``email_normalized``: without it, the
+        Cc / Bcc partners that do not follow the record were dropped.
+        """
+        message = self.env["mail.message"].create(
+            {"model": self.record._name, "res_id": self.record.id, "body": "x"}
+        )
+        rdata = self.record.with_context(
+            is_from_composer=True,
+            partner_cc_ids=self.us2,
+            partner_bcc_ids=self.us3,
+        )._notify_get_recipients(message, {"message_type": "comment"})
+        by_id = {r["id"]: r for r in rdata}
+        for partner in self.us2 + self.us3:
+            self.assertEqual(by_id[partner.id]["email_normalized"], partner.email)

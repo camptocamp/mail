@@ -11,25 +11,27 @@ _logger = logging.getLogger(__name__)
 class IrMailServer(models.Model):
     _inherit = "ir.mail_server"
 
-    def _prepare_email_message(self, message, smtp_session):
-        """
-        Define smtp_to based on context instead of To+Cc+Bcc
-        """
-        x_odoo_bcc_value = next(
-            (value for key, value in message._headers if key == "X-Odoo-Bcc"), None
-        )
-        # Add Bcc field inside message to pass validation
-        if x_odoo_bcc_value:
-            message["Bcc"] = x_odoo_bcc_value
+    def _prepare_email_message__(self, message, smtp_session):  # noqa: PLW3201
+        """Make sure a composer email is only sent to its own recipient.
 
-        smtp_from, smtp_to_list, message = super()._prepare_email_message(
+        Each recipient gets its own email, see ``MailMail._prepare_outgoing_list``.
+        Since 19.0 Odoo restricts the SMTP envelope through the
+        ``send_validated_to`` context key, which ``MailMail._send`` fills with the
+        normalized email of the recipient of that very email. Without it,
+        ``_prepare_smtp_to_list`` falls back to To + Cc + Bcc, which would send
+        duplicate emails and leak the Bcc recipients: refuse to send instead.
+
+        This is the 19.0 counterpart of the ``recipients`` context guard added in
+        OCA/mail#233 for 18.0.
+        """
+        smtp_from, smtp_to_list, message = super()._prepare_email_message__(
             message, smtp_session
         )
 
-        is_from_composer = self.env.context.get("is_from_composer", False)
-        if is_from_composer and self.env.context.get("recipients", False):
-            smtp_to = self.env.context["recipients"].pop(0)
-            _logger.debug("smtp_to: %s", smtp_to)
-            smtp_to_list = [smtp_to]
+        if self.env.context.get("is_from_composer") and not self.env.context.get(
+            "send_validated_to"
+        ):
+            raise ValueError("Could not determine the recipient of this email")
 
+        _logger.debug("smtp_to_list: %s", smtp_to_list)
         return smtp_from, smtp_to_list, message

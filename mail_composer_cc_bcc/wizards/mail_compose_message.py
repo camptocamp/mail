@@ -82,7 +82,13 @@ class MailComposeMessage(models.TransientModel):
                 composer.partner_bcc_ids = self.env.company.default_partner_bcc_ids
 
     @api.depends(
-        "composition_mode", "model", "parent_id", "res_domain", "res_ids", "template_id"
+        "composition_mode",
+        "model",
+        "parent_id",
+        "res_domain",
+        "res_ids",
+        "subtype_id",
+        "template_id",
     )
     def _compute_partner_ids(self):
         """
@@ -91,17 +97,22 @@ class MailComposeMessage(models.TransientModel):
         return: field Recipients filled with value from 'email_to', 'partner_ids'
         """
         for composer in self:
+            template = composer.template_id
             if (
-                composer.template_id
+                template
                 and composer.composition_mode == "comment"
                 and not composer.composition_batch
+                and (not template.use_default_to or not composer.partner_ids)
             ):
                 res_ids = composer._evaluate_res_ids() or [0]
                 rendered_values = composer._generate_template_for_composer(
                     res_ids,
                     # DIFFERENT FROM ODOO NATIVE:
                     {"email_to", "partner_ids"},
-                    allow_suggested=False,
+                    allow_suggested=(
+                        composer.message_type == "comment"
+                        and not composer.subtype_is_log
+                    ),
                     find_or_create_partners=True,
                 )[res_ids[0]]
                 if rendered_values.get("partner_ids"):

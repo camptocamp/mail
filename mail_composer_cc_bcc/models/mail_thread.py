@@ -42,6 +42,13 @@ class MailThread(models.AbstractModel):
         if skip_adding_cc_bcc:
             return res
 
+        # Persist on the mail.mail that it was built with this module's Cc /
+        # Bcc handling, so that a later send without the composer context
+        # (Retry button, queue cron, resend wizard) keeps applying it instead
+        # of falling back to core and disclosing the Bcc partners.
+        if context.get("is_from_composer", False):
+            res["is_composer_cc_bcc"] = True
+
         partners_cc = context.get("partner_cc_ids", None)
         if partners_cc:
             res["email_cc"] = format_emails_str(partners_cc)
@@ -97,7 +104,14 @@ class MailThread(models.AbstractModel):
                     "notif": data.get("notif") and data.get("notif") or notif,
                     "type": msg_type,
                     "is_follower": data.get("is_follower"),
+                    "lang": data.get("lang"),
                     "uid": False,
+                    # Same contract as core's recipients data: without the
+                    # email, any override that skips recipients without an
+                    # address drops the Cc / Bcc partners that are not
+                    # followers, and they silently get nothing.
+                    "email_normalized": data.get("email_normalized") or "",
+                    "name": data.get("name") or "",
                 }
                 rdata.append(pdata)
         return rdata
@@ -127,6 +141,19 @@ class MailThread(models.AbstractModel):
             customer_data.setdefault("recipients_ids", [])
             customer_data["recipients_ids"] += ids
         return [customer_data]
+
+    def _notify_thread_by_email(self, message, recipients_data, **kwargs):
+        # Pass the whole audience to `_prepare_outgoing_list`
+        # (only known here)
+        if self.env.context.get("is_from_composer") and not self.env.context.get(
+            "skip_adding_cc_bcc"
+        ):
+            self = self.with_context(
+                composer_recipient_ids=[
+                    data["id"] for data in recipients_data if data["notif"] == "email"
+                ]
+            )
+        return super()._notify_thread_by_email(message, recipients_data, **kwargs)
 
     def _notify_thread(self, message, msg_vals=False, **kwargs):
         if message.message_type == "notification":

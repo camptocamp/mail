@@ -3,9 +3,10 @@
 import hashlib
 import inspect
 
-from odoo import tools
+from odoo import Command, tools
 from odoo.tests import Form, tagged
 
+from odoo.addons.base.models.ir_mail_server import extract_rfc2822_addresses
 from odoo.addons.mail.tests.common import MailCase
 from odoo.addons.mail.tests.test_mail_composer import TestMailComposerForm
 from odoo.addons.mail.wizard.mail_compose_message import (
@@ -13,7 +14,7 @@ from odoo.addons.mail.wizard.mail_compose_message import (
 )
 
 VALID_HASHES = {
-    "mail.composer:_compute_partner_ids": ["4e49f0d6c53f41ac24b02176e97b600a"],
+    "mail.composer:_compute_partner_ids": ["c3903ab78bf2e5d9aba078ac2689d974"],
 }
 
 
@@ -124,6 +125,128 @@ class TestMailCcBcc(TestMailComposerForm, MailComposerCcBccMixin):
         self.assertEqual(mail.email_cc, expecting)
         expecting = '"partner_bcc" <partner_bcc@example.com>'
         self.assertEqual(mail.email_bcc, expecting)
+
+    def test_email_cc_bcc_one_email_per_recipient(self):
+        """Every recipient gets exactly one email, and no Bcc address leaks.
+
+        Regression test: the Cc-only email Odoo builds when ``mail.email_to``
+        is empty is a duplicate here, and dropping it by length (``res.pop()``)
+        removed the *last* recipient instead, silently losing an email.
+        """
+        partner_bcc2 = self.env["res.partner"].create(
+            {"name": "partner_bcc2", "email": "partner_bcc2@example.com"}
+        )
+        self.test_record.email = "test@example.com"
+        form = self.open_mail_composer_form()
+        composer = form.save()
+        composer.partner_cc_ids = self.partner_cc
+        composer.partner_cc_ids |= self.partner_cc2
+        composer.partner_bcc_ids = self.partner_bcc
+        composer.partner_bcc_ids |= partner_bcc2
+
+        with self.mock_mail_gateway():
+            composer._action_send_mail()
+
+        # 1 To + 2 Cc + 2 Bcc = 5 recipients, 5 emails, no duplicate, none lost
+        self.assertEqual(len(self._mails), 5)
+
+        bcc_emails = {self.partner_bcc.email, partner_bcc2.email}
+        expected_cc = ", ".join(
+            [
+                '"partner_cc" <partner_cc@example.com>',
+                '"partner_cc2" <partner_cc2@example.com>',
+            ]
+        )
+        seen_bcc = set()
+        for mail in self._mails:
+            headers = mail.get("headers") or {}
+            # The To / Cc headers are the same on every email...
+            self.assertEqual(mail["email_cc"], expected_cc)
+            # ... and never expose a Bcc recipient
+            visible = f"{mail['email_to']} {mail['email_cc']}"
+            for bcc_email in bcc_emails:
+                self.assertNotIn(bcc_email, visible)
+            # the informational marker must not be set by default: unlike Bcc
+            # it is not stripped before sending (OCA/mail#233)
+            self.assertNotIn("X-Odoo-Bcc", headers)
+            if headers.get("Bcc"):
+                seen_bcc.add(extract_rfc2822_addresses(headers["Bcc"])[0])
+
+        # each Bcc recipient got its own email
+        self.assertEqual(seen_bcc, bcc_emails)
+
+    def test_email_cc_bcc_no_reply_all_header(self):
+        """'X-Msg-To-Add' must not survive: 19.0 merges it into the To header.
+
+        ``MailThread._notify_by_email_get_headers`` fills it with every external
+        recipient and ``IrMailServer._alter_message__`` merges it into ``To`` at
+        send time to enable Reply-All, which would disclose the Bcc recipients.
+        """
+        self.test_record.email = "test@example.com"
+        form = self.open_mail_composer_form()
+        composer = form.save()
+        composer.partner_cc_ids = self.partner_cc
+        composer.partner_bcc_ids = self.partner_bcc
+
+        with self.mock_mail_gateway():
+            composer._action_send_mail()
+
+        for mail in self._mails:
+            self.assertNotIn("X-Msg-To-Add", mail.get("headers") or {})
+
+    def test_email_cc_bcc_marker_opt_in(self):
+        """The 'X-Odoo-Bcc' marker is only added when explicitly enabled."""
+        self.test_record.email = "test@example.com"
+        form = self.open_mail_composer_form()
+        composer = form.save()
+        composer.partner_cc_ids = self.partner_cc
+        composer.partner_bcc_ids = self.partner_bcc
+
+        with self.mock_mail_gateway():
+            composer.with_context(expose_x_odoo_bcc=True)._action_send_mail()
+
+        markers = [
+            (mail.get("headers") or {}).get("X-Odoo-Bcc")
+            for mail in self._mails
+            if (mail.get("headers") or {}).get("X-Odoo-Bcc")
+        ]
+        self.assertEqual(len(markers), 1)
+        self.assertIn(self.partner_bcc.email, markers[0])
+
+    def test_email_cc_bcc_recipient_without_email(self):
+        """A recipient with no email must not take the whole mail.mail down.
+
+        Core builds a '"Name" <@False>' placeholder for such a partner, from
+        which no address can be extracted; indexing it blindly raised
+        IndexError and nobody received the message.
+        """
+        partner_no_email = self.env["res.partner"].create({"name": "No Email"})
+        mail = self.env["mail.mail"].create(
+            {
+                "subject": "test",
+                "body_html": "<p>test</p>",
+                "recipient_ids": [
+                    Command.set((self.partner_cc + partner_no_email).ids)
+                ],
+            }
+        )
+
+        outgoing = mail.with_context(is_from_composer=True)._prepare_outgoing_list()
+
+        # no exception, and one entry per recipient
+        self.assertEqual(len(outgoing), 2)
+
+        # the placeholder entry is left exactly as core built it, so that core
+        # finds no SMTP recipient for it, raises NO_VALID_RECIPIENT and skips
+        # only this one
+        placeholder = [e for e in outgoing if "No Email" in str(e["email_to"])]
+        self.assertEqual(len(placeholder), 1)
+        self.assertEqual(placeholder[0]["email_to"], ['"No Email" <@False>'])
+
+        # while the valid recipient did get the module's shared To header
+        valid = [e for e in outgoing if e is not placeholder[0]]
+        self.assertEqual(len(valid), 1)
+        self.assertIn("partner_cc@example.com", str(valid[0]["email_to"]))
 
     def test_template_cc_bcc(self):
         env = self.env
